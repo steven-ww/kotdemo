@@ -1,0 +1,77 @@
+// This file contains the partial logic/flow to obtain information form another system vai graphQL 
+// I find it impossible to follow or reason about.
+// This is only the starting point. The actualy graphQL logic is complex, threaded and also impossible to follow
+
+// I've tried to sequence the execution order here
+
+// Call this the starting point
+// Creates an object with two lambda's, passes that object to get a getProductIndoV2
+// Both Lambda's call other functions defined elsewhere...
+// Finally calls a method on a class named "getABC". So the class is named like a function..
+// the first lambda eventually ends up making a graphql query... 
+// Probably much easier to figure out if you had all the code, but it's hundreds of lines long
+fun getProductInfo(
+    userSession: UserSession,
+    listItems: List<DataStoreListItem>,
+    includeMessages: Boolean,
+): ProductInfoResult {
+    val additionalProductInfo = GetAdditionalProductInfo(
+        { fabricSomething ->
+            somethingTitleWithStatus(FabricSomething, userSession.correlationID).title
+        },
+        {
+                itemId -> getServices(itemId, userSession.correlationID)
+        },
+    )
+
+    return getProductInfoV2.getProductInfo(userSession, listItems, includeMessages, additionalProductInfo)
+}
+
+// The first Lambdas call stack...
+fun somethingTitleWithStatus(somethingID: String, correlationID: String) =
+    getSomethingTitleV2.somethingTitleWithStatus(somethingID, correlationID)
+
+
+private val getSomethingTitleV2 = GetSomethingTitleV2(ValidGraphQLKeys.SOMETHING_TITLE_V2, graphQLClient, di)
+
+
+fun somethingTitleWithStatus(somethingID: String, correlationID: String): SomethingTitleWithStatus {
+    return executeGraphQLForSingleValue(somethingID, correlationID, ::somethingTitleInvoke) {
+        somethingTitleWithFabricStatus(it.activeAndRetiredProducts)
+    } ?: SomethingTitleWithStatus("", FabricStatus.DELETED)
+}
+
+private suspend fun somethingTitleInvoke(
+    somethingID: String,
+    correlationID: String,
+): GraphQLClientResponse<GetSomethingTitlev2.Result> {
+    return graphQLClient.execute(GetSomethingTitlev2(GetSomethingTitlev2.Variables(somethingID))) {
+        header(CORRELATION_ID_HTTP_HEADER, correlationID)
+    }
+}
+
+
+// getProductInfo is 70 line method that wraps a runblocking in a Callable and then launches coroutines for each item in
+// the list, referencing the functions passed in from the Object above. So making graphql queries based on those functions
+// passed in...
+
+
+///// The getServices call stack .... very similiar... 
+
+fun getServices(itemId: String, correlationID: String) = getServices.getService(itemId, correlationID)
+
+// On the GetServices Object
+fun getService(itemId: String, correlationID: String): ServiceInformation? {
+    return executeGraphQLForSingleValue(itemId, correlationID, ::getServicesInvoke) {
+        parseServiceResult(it)
+    }
+}
+
+private suspend fun getServicesInvoke(
+    somethingID: String,
+    correlationID: String,
+): GraphQLClientResponse<GetServices.Result> {
+    return graphQLClient.execute(GetServices(GetServices.Variables(somethingID))) {
+        header(CORRELATION_ID_HTTP_HEADER, correlationID)
+    }
+}
